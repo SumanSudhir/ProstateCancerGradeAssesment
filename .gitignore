@@ -1,0 +1,12 @@
+/data
+/CLAM
+/Paper
+/2Satge/OUTPUT
+.*
+!/.gitignore
+/src/stage1
+*.csv
+*.txt
+*.pth
+/src
+/2Satge/src/rough.py
