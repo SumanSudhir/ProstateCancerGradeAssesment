@@ -56,23 +56,23 @@ else:
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-df = pd.read_csv(train_csv).set_index('image_id')
+df = pd.read_csv(train_csv)
+#
+# files = sorted(set([p[:-3] for p in os.listdir(files_path) if p.endswith('.h5')]))
+# df = df.loc[files]
+# df = df.reset_index()
 
-files = sorted(set([p[:-3] for p in os.listdir(files_path) if p.endswith('.h5')]))
-df = df.loc[files]
-df = df.reset_index()
-
-df = df[df['isup_grade'] != 0]
+# df = df[df['isup_grade'] != 0]
 df = df[df['data_provider'] != 'karolinska']
 
-splits = StratifiedKFold(n_splits=nfolds, random_state=SEED, shuffle=True)
-splits = list(splits.split(df, df.isup_grade))
-folds_splits = np.zeros(len(df)).astype(np.int)
-
-weighted_df = pd.read_csv(weight)
-
-for i in range(nfolds): folds_splits[splits[i][1]] = i
-df["split"] = folds_splits
+# splits = StratifiedKFold(n_splits=nfolds, random_state=SEED, shuffle=True)
+# splits = list(splits.split(df, df.isup_grade))
+# folds_splits = np.zeros(len(df)).astype(np.int)
+#
+# weighted_df = pd.read_csv(weight)
+#
+# for i in range(nfolds): folds_splits[splits[i][1]] = i
+# df["split"] = folds_splits
 
 print("Previous Length", len(df))
 if DEBUG:
@@ -85,15 +85,6 @@ mean = (0.485, 0.456, 0.406)
 std = (0.229, 0.224, 0.225)
 
 """Dataset"""
-train_transform = transforms.Compose([
-    transforms.ToPILImage(),
-    transforms.RandomResizedCrop(size),
-    transforms.RandomRotation(45),
-    transforms.RandomHorizontalFlip(p=0.5),
-    transforms.RandomVerticalFlip(p=0.5),
-    transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
-    transforms.ToTensor(),
-    transforms.Normalize(mean, std)])
 
 valid_transform = transforms.Compose([
     transforms.ToPILImage(),

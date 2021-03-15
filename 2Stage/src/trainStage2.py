@@ -31,10 +31,14 @@ split = 0
 nfolds = 4
 epochs = 25
 DEBUG = False
+N = 64
 
 files_path = '../../CLAM/pandaPatches10x/patches'
-train_csv = '../../data/train.csv'
-weight = '../../data/weight_karolinska_0.csv'
+# train_csv = '../../data/train.csv'
+# weight = '../../data/weight_karolinska_0.csv'
+
+train_csv = '../../data/karolinska.csv'
+weight = '../../data/karolinska_weight_karolinska_0.csv'
 
 def seed_everything(seed):
     random.seed(seed)
@@ -58,24 +62,23 @@ else:
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-
-df = pd.read_csv(train_csv).set_index('image_id')
-
-files = sorted(set([p[:-3] for p in os.listdir(files_path) if p.endswith('.h5')]))
-df = df.loc[files]
-df = df.reset_index()
-
-df = df[df['isup_grade'] != 0]
-df = df[df['data_provider'] == 'karolinska']
-
-splits = StratifiedKFold(n_splits=nfolds, random_state=SEED, shuffle=True)
-splits = list(splits.split(df, df.isup_grade))
-folds_splits = np.zeros(len(df)).astype(np.int)
+df = pd.read_csv(train_csv)
+# df = pd.read_csv(train_csv).set_index('image_id')
+#
+# files = sorted(set([p[:-3] for p in os.listdir(files_path) if p.endswith('.h5')]))
+# df = df.loc[files]
+# df = df.reset_index()
+#
+# df = df[df['isup_grade'] != 0]
+# df = df[df['data_provider'] == 'karolinska']
+#
+# splits = StratifiedKFold(n_splits=nfolds, random_state=SEED, shuffle=True)
+# splits = list(splits.split(df, df.isup_grade))
+# folds_splits = np.zeros(len(df)).astype(np.int)
 
 weighted_df = pd.read_csv(weight)
+# print(weighted_df)
 
-for i in range(nfolds): folds_splits[splits[i][1]] = i
-df["split"] = folds_splits
 
 print("Previous Length", len(df))
 if DEBUG:
@@ -90,13 +93,34 @@ std = (0.229, 0.224, 0.225)
 """Dataset"""
 train_transform = transforms.Compose([
     transforms.ToPILImage(),
-    transforms.RandomResizedCrop(size),
-    transforms.RandomRotation(45),
-    transforms.RandomHorizontalFlip(p=0.5),
-    transforms.RandomVerticalFlip(p=0.5),
-    transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
+    transforms.Resize((size, size)),
+    transforms.RandomChoice([
+        transforms.ColorJitter(brightness=0.5),
+        transforms.ColorJitter(contrast=0.5),
+        transforms.ColorJitter(saturation=0.5),
+        transforms.ColorJitter(hue=0.5),
+        transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
+        transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.3),
+        transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5),
+    ]),
+    transforms.RandomChoice([
+        transforms.RandomRotation((0,0)),
+        transforms.RandomHorizontalFlip(p=1),
+        transforms.RandomVerticalFlip(p=1),
+        transforms.RandomRotation((90,90)),
+        transforms.RandomRotation((180,180)),
+        transforms.RandomRotation((270,270)),
+        transforms.Compose([
+            transforms.RandomHorizontalFlip(p=1),
+            transforms.RandomRotation((90,90)),
+        ]),
+        transforms.Compose([
+            transforms.RandomHorizontalFlip(p=1),
+            transforms.RandomRotation((270,270)),
+        ])
+    ]),
     transforms.ToTensor(),
-    transforms.Normalize(mean, std)])
+    transforms.Normalize(mean,std)])
 
 valid_transform = transforms.Compose([
     transforms.ToPILImage(),
@@ -107,18 +131,20 @@ valid_transform = transforms.Compose([
 df_train = df[df["split"] != split]
 df_valid = df[df["split"] == split]
 
-t_dataset = Whole_Slide_ROI(df_train, weighted_df, files_path, train_transform)
-v_dataset = Whole_Slide_ROI(df_valid, weighted_df, files_path, valid_transform)
+t_dataset = Whole_Slide_ROI(df_train, weighted_df, files_path, train_transform, N)
+v_dataset = Whole_Slide_ROI(df_valid, weighted_df, files_path, valid_transform, N)
 print('Length of training and validation set are {} {}'.format(len(t_dataset), len(v_dataset)))
 
 trainloader = DataLoader(t_dataset, batch_size=6, shuffle=True, num_workers=4)
 validloader = DataLoader(v_dataset, batch_size=6, shuffle=False, num_workers=4)
 
 
-writer = SummaryWriter(f'../OUTPUT/stage2/split_{split}')
+# writer = SummaryWriter(f'../OUTPUT/stage2/split_{split}')
+writer = SummaryWriter(f'../OUTPUT/karolinska/stage2n/split_{split}')
+
 
 """Training"""
-model = EfficientAvgModel()
+model = EfficientAvgModel(out_dim=5)
 model.to(device)
 
 criterion = nn.BCEWithLogitsLoss()
@@ -202,15 +228,27 @@ for epoch in range(epochs):
     validation_loss.append(avg_valid_loss)
 #     l_rate = optimizer.param_groups[0]["lr"]
 
+    # writer.add_scalar('Valid Kappa Score', score , epoch)
+    # writer.add_scalars('Accuracy', {'Training Accuracy': train_acc,'Validation Accuracy': valid_acc}, epoch)
+    # writer.add_scalars('Loss', {'Training Loss': avg_train_loss, 'Training Instance Loss': avg_instance_loss, 'Validation Loss': avg_valid_loss}, epoch)
+    # writer.add_scalar('Learning Rate', l_rate , epoch)
+    #
+    # if(k_score<score):
+    #     torch.save(model.state_dict(), "../OUTPUT/stage2/split_{}/efficient_b0_{}_{}.pth".format(split, epoch+1, score))
+    #     np.savetxt(f'../OUTPUT/stage2/split_{split}/valid_cm_{epoch+1}_{score}.txt', valid_cm, fmt='%10.0f')
+    #     np.savetxt(f'../OUTPUT/stage2/split_{split}/train_cm_{epoch+1}_{score}.txt', train_cm, fmt='%10.0f')
+    #     k_score = score
+
+
     writer.add_scalar('Valid Kappa Score', score , epoch)
     writer.add_scalars('Accuracy', {'Training Accuracy': train_acc,'Validation Accuracy': valid_acc}, epoch)
     writer.add_scalars('Loss', {'Training Loss': avg_train_loss, 'Training Instance Loss': avg_instance_loss, 'Validation Loss': avg_valid_loss}, epoch)
     writer.add_scalar('Learning Rate', l_rate , epoch)
 
-    if(k_score<score):
-        torch.save(model.state_dict(), "../OUTPUT/stage2/split_{}/efficient_b0_{}_{}.pth".format(split, epoch+1, score))
-        np.savetxt(f'../OUTPUT/stage2/split_{split}/valid_cm_{epoch+1}_{score}.txt', valid_cm, fmt='%10.0f')
-        np.savetxt(f'../OUTPUT/stage2/split_{split}/train_cm_{epoch+1}_{score}.txt', train_cm, fmt='%10.0f')
+    if(k_score < score or score > 0.80):
+        torch.save(model.state_dict(), "../OUTPUT/karolinska/stage2n/split_{}/efficient_b0_{}_{}_{:.4f}.pth".format(split, N, epoch+1, score))
+        np.savetxt(f'../OUTPUT/karolinska/stage2n/split_{split}/valid_cm_{epoch+1}_{score}.txt', valid_cm, fmt='%10.0f')
+        np.savetxt(f'../OUTPUT/karolinska/stage2n/split_{split}/train_cm_{epoch+1}_{score}.txt', train_cm, fmt='%10.0f')
         k_score = score
 
 #     scheduler.step(avg_valid_loss)

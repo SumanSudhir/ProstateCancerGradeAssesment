@@ -27,17 +27,15 @@ from torch.utils.tensorboard import SummaryWriter
 
 SEED = 2021
 size = 128
-# split = 0
+split = 3
 N = 64
-nfolds = 5
-epochs = 35
-DEBUG = False
+nfolds = 4
+epochs = 20
+DEBUG = True
 
 
 files_path = '../../CLAM/pandaPatches10x/patches'
-# train_csv = '../../data/train.csv'
-train_csv = '../../data/karolinska.csv'
-
+train_csv = '../../data/train.csv'
 
 def seed_everything(seed):
     random.seed(seed)
@@ -62,25 +60,21 @@ else:
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-df = pd.read_csv(train_csv)
-# df = pd.read_csv(train_csv).set_index('image_id')
-#
-# files = sorted(set([p[:-3] for p in os.listdir(files_path) if p.endswith('.h5')]))
-# df = df.loc[files]
-# df = df.reset_index()
-#
-# # df = df[df['isup_grade'] != 0]
-# df = df[df['data_provider'] == 'karolinska']
-#
-# splits = StratifiedKFold(n_splits=nfolds, random_state=SEED, shuffle=True)
-# splits = list(splits.split(df, df.isup_grade))
-# folds_splits = np.zeros(len(df)).astype(np.int)
-#
-# for i in range(nfolds): folds_splits[splits[i][1]] = i
-# df["split"] = folds_splits
-#
-#
-# df.to_csv('../../data/karolinska.csv', index=False)
+df = pd.read_csv(train_csv).set_index('image_id')
+
+files = sorted(set([p[:-3] for p in os.listdir(files_path) if p.endswith('.h5')]))
+df = df.loc[files]
+df = df.reset_index()
+
+df = df[df['isup_grade'] != 0]
+df = df[df['data_provider'] != 'karolinska']
+
+splits = StratifiedKFold(n_splits=nfolds, random_state=SEED, shuffle=True)
+splits = list(splits.split(df, df.isup_grade))
+folds_splits = np.zeros(len(df)).astype(np.int)
+
+for i in range(nfolds): folds_splits[splits[i][1]] = i
+df["split"] = folds_splits
 
 print("Previous Length", len(df))
 if DEBUG:
@@ -89,40 +83,19 @@ if DEBUG:
 print("Usable Length", len(df))
 
 """Mean and Std deviation"""
-mean = (0.485, 0.456, 0.406)
-std = (0.229, 0.224, 0.225)
+mean = (0.5, 0.5, 0.5)
+std = (0.5, 0.5, 0.5)
 
 """Dataset"""
 train_transform = transforms.Compose([
     transforms.ToPILImage(),
-    transforms.Resize((size, size)),
-    transforms.RandomChoice([
-        transforms.ColorJitter(brightness=0.5),
-        transforms.ColorJitter(contrast=0.5),
-        transforms.ColorJitter(saturation=0.5),
-        transforms.ColorJitter(hue=0.5),
-        transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
-        transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.3),
-        transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5),
-    ]),
-    transforms.RandomChoice([
-        transforms.RandomRotation((0,0)),
-        transforms.RandomHorizontalFlip(p=1),
-        transforms.RandomVerticalFlip(p=1),
-        transforms.RandomRotation((90,90)),
-        transforms.RandomRotation((180,180)),
-        transforms.RandomRotation((270,270)),
-        transforms.Compose([
-            transforms.RandomHorizontalFlip(p=1),
-            transforms.RandomRotation((90,90)),
-        ]),
-        transforms.Compose([
-            transforms.RandomHorizontalFlip(p=1),
-            transforms.RandomRotation((270,270)),
-        ])
-    ]),
+    transforms.RandomResizedCrop(size),
+    transforms.RandomRotation(45),
+    transforms.RandomHorizontalFlip(p=0.5),
+    transforms.RandomVerticalFlip(p=0.5),
+    transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
     transforms.ToTensor(),
-    transforms.Normalize(mean,std)])
+    transforms.Normalize(mean, std)])
 
 valid_transform = transforms.Compose([
     transforms.ToPILImage(),
@@ -132,7 +105,7 @@ valid_transform = transforms.Compose([
     transforms.Normalize(mean, std)])
 
 
-for split in range(nfolds):
+for split in range(3,nfolds):
 
     df_train = df[df["split"] != split]
     df_valid = df[df["split"] == split]
@@ -141,15 +114,21 @@ for split in range(nfolds):
     v_dataset = Whole_Slide_Bag(df_valid, files_path, valid_transform, num_patches=N)
     print('Length of training and validation set are {} {}'.format(len(t_dataset), len(v_dataset)))
 
-    trainloader = DataLoader(t_dataset, batch_size=6, shuffle=True, num_workers=4, drop_last=True)
-    validloader = DataLoader(v_dataset, batch_size=6, shuffle=False, num_workers=4, drop_last=True)
+    trainloader = DataLoader(t_dataset, batch_size=4, shuffle=True, num_workers=4, drop_last=True)
+    validloader = DataLoader(v_dataset, batch_size=4, shuffle=False, num_workers=4, drop_last=True)
 
-    writer = SummaryWriter(f'../OUTPUT/karolinska/stage1n/split_{split}')
+    writer = SummaryWriter(f'../OUTPUT/radboud/stage1/split_{split}')
 
     """Training"""
-    model = EfficientModel(c_out=5, tile_size=size, n_tiles=N)
-    # model = nn.DataParallel(model, device_ids=[2,3])
+    model = EfficientModel(c_out=4, tile_size=size, n_tiles=N)
+    # model = nn.DataParallel(model)
     model.to(device)
+
+    net1 = AdaptNet(tile_size=size)
+    net1.load_state_dict(torch.load('../OUTPUT/radboud/adapt/split_3/adapt_128_34_0.0011293814293042357.pth', map_location=torch.device(device)))
+    net1 = nn.DataParallel(net1)
+    net1.to(device)
+
 
     criterion = nn.BCEWithLogitsLoss()
     # criterion = nn.CrossEntropyLoss()
@@ -180,11 +159,17 @@ for split in range(nfolds):
             if train_on_gpu:
                 img, label = img.to(device), label.to(device)
 
+            with torch.no_grad():
+                img = img.view(-1,3,size,size)
+                img = net1(img)
+                img = img.view(-1,N,3,size,size)
+
+            # print(img.shape)
             label = label.long()
             optimizer.zero_grad()
             logits, _, instance_loss = model(img)
             loss = criterion(logits.float(), label.float())
-            t_loss = 0.8*loss + 0.2*instance_loss
+            t_loss = 0.7*loss + 0.3*instance_loss
             t_loss.backward()
             optimizer.step()
 
@@ -208,14 +193,19 @@ for split in range(nfolds):
                 if train_on_gpu:
                     img, label = img.to(device), label.to(device)
 
-                logits, _, instance_loss = model(img)
-                # logits2, _, instance_loss2 = model(img.flip(-1))
+                with torch.no_grad():
+                    img = img.view(-1,3,size,size)
+                    img = net1(img)
+                    img = img.view(-1,N,3,size,size)
 
-                # logits = 0.5*logits1 + 0.5*logits2
-                # instance_loss = 0.5*instance_loss1 + 0.5*instance_loss2
+                logits1, _, instance_loss1 = model(img)
+                logits2, _, instance_loss2 = model(img.flip(-1))
+
+                logits = 0.5*logits1 + 0.5*logits2
+                instance_loss = 0.5*instance_loss1 + 0.5*instance_loss2
 
                 val_loss = criterion(logits.float(), label.float())
-                v_loss = 0.8*val_loss + 0.2*instance_loss
+                v_loss = 0.7*val_loss + 0.3*instance_loss
                 avg_valid_loss += v_loss.item()
 
                 pred = logits.sigmoid().sum(1).detach().round()
@@ -247,10 +237,10 @@ for split in range(nfolds):
         writer.add_scalars('Loss', {'Training Loss': avg_train_loss, 'Training Instance Loss': avg_instance_loss, 'Validation Loss': avg_valid_loss}, epoch)
         writer.add_scalar('Learning Rate', l_rate , epoch)
 
-        if(k_score < score or score > 0.80):
-            torch.save(model.state_dict(), "../OUTPUT/karolinska/stage1n/split_{}/efficient_b0_{}_{}_{:.4f}.pth".format(split, N, epoch+1, score))
-            np.savetxt(f'../OUTPUT/karolinska/stage1n/split_{split}/valid_cm_{epoch+1}_{score}.txt', valid_cm, fmt='%10.0f')
-            np.savetxt(f'../OUTPUT/karolinska/stage1n/split_{split}/train_cm_{epoch+1}_{score}.txt', train_cm, fmt='%10.0f')
+        if(k_score<score):
+            torch.save(model.state_dict(), "../OUTPUT/radboud/stage1/split_{}/efficient_b0_{}_{}.pth".format(split, epoch+1, score))
+            np.savetxt(f'../OUTPUT/radboud/stage1/split_{split}/valid_cm_{epoch+1}_{score}.txt', valid_cm, fmt='%10.0f')
+            np.savetxt(f'../OUTPUT/radboud/stage1/split_{split}/train_cm_{epoch+1}_{score}.txt', train_cm, fmt='%10.0f')
             k_score = score
 
     #     scheduler.step(avg_valid_loss)

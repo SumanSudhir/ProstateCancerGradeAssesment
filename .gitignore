@@ -10,3 +10,4 @@
 *.pth
 /src
 /2Satge/src/rough.py
+*.ipynb
