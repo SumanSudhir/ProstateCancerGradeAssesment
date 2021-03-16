@@ -2,6 +2,7 @@ import os
 import argparse
 
 from BiGAN import *
+from VAE import *
 
 
 def parse_args():
@@ -23,7 +24,7 @@ def parse_args():
     parser.add_argument('--beta1', type=float, default=0.5, help='for adam')
     parser.add_argument('--beta2', type=float, default=0.999, help='for adam')
     parser.add_argument('--slope', type=float, default=1e-2, help='for leaky ReLU')
-    parser.add_argument('--decay', type=float, default=2.5*1e-5, help='for weight decay')
+    parser.add_argument('--decay', type=float, default=1e-5, help='for weight decay')
     parser.add_argument('--dropout', type=float, default=0.2)
 
     # network parameters
@@ -60,6 +61,27 @@ def check_args(args):
 
     return args
 
+#
+# def main():
+#     # parse arguments
+#     args = parse_args()
+#     args.gpu = True
+#     if args is None:
+#         exit()
+#
+#     bigan = BiGAN(args)
+#
+#     # ecrase anciens fichiers
+#     with open('pixel_error_BIGAN.txt', 'w') as f:
+#         f.writelines('')
+#     with open('z_error_BIGAN.txt', 'w') as f:
+#         f.writelines('')
+#
+#     bigan.train()
+#     print(" [*] Training finished!")
+#
+#     bigan.save_model()
+#     # bigan.plot_states()
 
 def main():
     # parse arguments
@@ -68,21 +90,13 @@ def main():
     if args is None:
         exit()
 
-    bigan = BiGAN(args)
+    vae = VAE(args)
 
-    # ecrase anciens fichiers
-    with open('pixel_error_BIGAN.txt', 'w') as f:
-        f.writelines('')
-    with open('z_error_BIGAN.txt', 'w') as f:
-        f.writelines('')
-
-    bigan.train()
+    vae.train()
     print(" [*] Training finished!")
 
-    bigan.save_model()
-
-
-    # bigan.plot_states()
+    # bigan.save_model()
+    # bigan.plot_state
 
 
 if __name__ == '__main__':

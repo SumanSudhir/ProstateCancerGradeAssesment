@@ -190,10 +190,10 @@ validloader_kar = DataLoader(v_dataset, batch_size=1, shuffle=True, num_workers=
 
 
 """Training"""
-model = AdaptNet(tile_size=size)
-model.load_state_dict(torch.load('../OUTPUT/radboud/adapt/split_3/adapt_128_50_0.000691256259978261.pth', map_location=torch.device(device)))
-# model = nn.DataParallel(model, device_ids=[2,3])
-model.to(device)
+# model = AdaptNet(tile_size=size)
+# model.load_state_dict(torch.load('../OUTPUT/radboud/adapt/split_3/adapt_128_50_0.000691256259978261.pth', map_location=torch.device(device)))
+# # model = nn.DataParallel(model, device_ids=[2,3])
+# model.to(device)
 
 # from efficientnet_pytorch import EfficientNet
 # name = 'efficientnet-b0'
@@ -204,15 +204,15 @@ model.to(device)
 # m.eval()
 
 
-m = EfficientModel(c_out=4, tile_size=size, n_tiles=N)
-# m.load_state_dict(torch.load('../OUTPUT/tcga/stage1/split_0/efficient_b0_20_0.6779463243873979.pth', map_location=torch.device(device)))
-# # m.load_state_dict(torch.load('../OUTPUT/radbound/stage1/split_0/efficient_b0_17_0.6364211353668056.pth', map_location=torch.device(device)))
-m.load_state_dict(torch.load('../OUTPUT/radboud/stage1/split_3/efficient_b0_12_0.7296633941093968.pth', map_location=torch.device(device)))
-m.to(device)
-m.eval()
-
-features = []
-labels = []
+# m = EfficientModel(c_out=4, tile_size=size, n_tiles=N)
+# # m.load_state_dict(torch.load('../OUTPUT/tcga/stage1/split_0/efficient_b0_20_0.6779463243873979.pth', map_location=torch.device(device)))
+# # # m.load_state_dict(torch.load('../OUTPUT/radbound/stage1/split_0/efficient_b0_17_0.6364211353668056.pth', map_location=torch.device(device)))
+# m.load_state_dict(torch.load('../OUTPUT/radboud/stage1/split_3/efficient_b0_12_0.7296633941093968.pth', map_location=torch.device(device)))
+# m.to(device)
+# m.eval()
+#
+# features = []
+# labels = []
 
 
 # for imgs,_,_,_,_ in tqdm(validloader_tcga):
@@ -272,6 +272,44 @@ labels = []
 
 
 
+# for imgs,_,_,_,_ in tqdm(validloader_tcga):
+#     with torch.no_grad():
+#         x = model(imgs.view(-1,3,size,size).to(device))
+#         f = m.feature_extractor(x).cpu()
+#         for i in f:
+#             features.append(i.unsqueeze(0).numpy())
+#             labels.append('tcga')
+#
+# for imgs,_,_,_,_ in tqdm(validloader_kar):
+#     with torch.no_grad():
+#         x = model(imgs.view(-1,3,size,size).to(device))
+#         f = m.feature_extractor(x).cpu()
+#         for i in f:
+#             features.append(i.unsqueeze(0).numpy())
+#             labels.append('karolinska')
+#
+# for imgs,_,_,_,_ in tqdm(validloader_rad):
+#     with torch.no_grad():
+#         x = model(imgs.view(-1,3,size,size).to(device))
+#         f = m.feature_extractor(x).cpu()
+#         for i in f:
+#             features.append(i.unsqueeze(0).numpy())
+#             labels.append('radboud')
+#
+
+
+## VAE
+
+m = VAEncoder()
+# m.load_state_dict(torch.load('../OUTPUT/tcga/stage1/split_0/efficient_b0_20_0.6779463243873979.pth', map_location=torch.device(device)))
+# # m.load_state_dict(torch.load('../OUTPUT/radbound/stage1/split_0/efficient_b0_17_0.6364211353668056.pth', map_location=torch.device(device)))
+m.load_state_dict(torch.load('../OUTPUT/radboud/stage1/split_3/efficient_b0_12_0.7296633941093968.pth', map_location=torch.device(device)))
+m.to(device)
+m.eval()
+
+features = []
+labels = []
+
 for imgs,_,_,_,_ in tqdm(validloader_tcga):
     with torch.no_grad():
         x = model(imgs.view(-1,3,size,size).to(device))
@@ -295,7 +333,6 @@ for imgs,_,_,_,_ in tqdm(validloader_rad):
         for i in f:
             features.append(i.unsqueeze(0).numpy())
             labels.append('radboud')
-#
 
 
 features = np.concatenate(features, axis = 0)

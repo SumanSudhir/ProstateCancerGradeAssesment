@@ -1,11 +1,14 @@
 import torch
+import torch.nn as nn
 from torchvision import transforms
+import torch.nn.functional as F
+
 
 """
 Mean and Std deviation
 """
-mean = (0.485, 0.456, 0.406)
-std = (0.229, 0.224, 0.225)
+mean = (0.5, 0.5, 0.5)
+std = (0.5, 0.5, 0.5)
 
 def log(x):
     return torch.log(x + 1e-8)
@@ -16,6 +19,18 @@ def print_network(net):
         num_params += param.numel()
     print(net)
     print('Total number of parameters: %d' % num_params)
+
+def initialize_weights(net):
+    for m in net.modules():
+        if isinstance(m, nn.Conv2d):
+            m.weight.data.normal_(0, 0.02)
+            m.bias.data.zero_()
+        elif isinstance(m, nn.ConvTranspose2d):
+            m.weight.data.normal_(0, 0.02)
+            m.bias.data.zero_()
+        elif isinstance(m, nn.Linear):
+            m.weight.data.normal_(0, 0.02)
+            m.bias.data.zero_()
 
 
 def get_transform(*, data, size=128):
@@ -54,6 +69,31 @@ def get_transform(*, data, size=128):
     elif data == 'valid':
         return transforms.Compose([
             transforms.ToPILImage(),
-            transforms.Resize(size),
+            transforms.Resize((size,size)),
             transforms.ToTensor(),
             transforms.Normalize(mean, std)])
+
+def VAE_loss(recons_x, x, mu, logvar):
+    MSE = F.mse_loss(recons_x, x, reduction='mean')
+    # l2 = 5e-5*torch.mean(1+logvar-mu.pow(2) -logvar.exp())
+    KLD_element = mu.pow(2).add_(logvar.exp()).mul_(-1).add_(1).add_(logvar)
+    KLD = torch.mean(KLD_element).mul_(-0.5)
+
+    return MSE+KLD
+
+class UnNormalize(object):
+    def __init__(self, mean=mean, std=std):
+        self.mean = mean
+        self.std = std
+
+    def __call__(self, tensor):
+        """
+        Args:
+            tensor (Tensor): Tensor image of size (C, H, W) to be normalized.
+        Returns:
+            Tensor: Normalized image.
+        """
+        for t, m, s in zip(tensor, self.mean, self.std):
+            t.mul_(s).add_(m)
+            # The normalize code -> t.sub_(m).div_(s)
+        return tensor

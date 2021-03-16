@@ -1,3 +1,6 @@
+import sys
+sys.path.append("..")
+
 import torch
 import torch.nn as nn
 
@@ -6,6 +9,8 @@ import torchvision.models as models
 from torch.nn.parameter import Parameter
 import torch.nn.functional as F
 from sklearn.utils import shuffle
+
+from utils.utils import *
 
 class EfficientModel(nn.Module):
 
@@ -257,6 +262,174 @@ class AutoRoi(nn.Module):
 
 # https://github.com/WilliBee/bigan_SRL/blob/master/models.py
 # https://arxiv.org/pdf/1606.03657.pdf
+# class Generator(nn.Module):
+#     """
+#     Input: Vector from representation space of dimension z-dim
+#     Output: Vector from image space of dimension X-dim
+#     """
+#     def __init__(self, z_dim, params):
+#         super().__init__()
+#
+#         self.input_dim = z_dim
+#         self.output_dim = 1
+#         self.slope = params['slope']
+#         self.dropout  = params['dropout']
+#         # self.num_channels = params['num_channels']
+#
+#         self.generator = nn.Sequential(
+#             #z_dimx1x1
+#             nn.ConvTranspose2d(z_dim, 512, 3, stride=2, padding=0,output_padding=1, bias=True),
+#             nn.BatchNorm2d(512),
+#             nn.LeakyReLU(self.slope,inplace=True),
+#             #512x4x4
+#             nn.ConvTranspose2d(512, 512, 3, stride=2, padding=1,output_padding=1, bias=True),
+#             nn.BatchNorm2d(512),
+#             nn.LeakyReLU(self.slope,inplace=True),
+#             #512x8x8
+#             nn.ConvTranspose2d(512, 256, 3, stride=2, padding=1, output_padding=1, bias=True),
+#             nn.BatchNorm2d(256),
+#             nn.LeakyReLU(self.slope,inplace=True),
+#             #256x16x16
+#             nn.ConvTranspose2d(256, 128 ,3, stride=2, padding=1, output_padding=1, bias=True),
+#             nn.BatchNorm2d(128),
+#             nn.LeakyReLU(self.slope,inplace=True),
+#             ##128x32x32
+#             nn.ConvTranspose2d(128, 64, 3, stride=2, padding=1, output_padding=1,bias=True),
+#             nn.BatchNorm2d(64),
+#             nn.LeakyReLU(self.slope,inplace=True),
+#             #64x64x64
+#             nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, output_padding=1,bias=True),
+#             nn.BatchNorm2d(32),
+#             nn.LeakyReLU(self.slope,inplace=True),
+#             #32x128x128
+#             nn.Conv2d(32, 3, 1, stride=1, bias=True),
+#             nn.Tanh()
+#             #3x128x128
+#         )
+#
+#         initialize_weights(self)
+#
+#     def forward(self, x):
+#         x = self.generator(x)
+#
+#         return x
+#
+# class Discriminator(nn.Module):
+#     """
+#     Input: Tuple (X,z) of image vector and corresponding z vector from the Encoder.
+#     Output: 1-dimesnional value
+#     """
+#     def __init__(self, z_dim, h_dim, params):
+#         super().__init__()
+#         self.z_dim = z_dim
+#         self.h_dim = h_dim
+#
+#         self.slope = params['slope']
+#         self.dropout = params['dropout']
+#         self.batch_size = params['batch_size']
+#
+#         # inference over x
+#         self.inference_x = nn.Sequential(
+#             #3x128x128
+#             nn.Conv2d(3, 32, 3, stride=2, padding=1, bias=True),
+#             nn.BatchNorm2d(32),
+#             nn.LeakyReLU(self.slope, inplace=True),
+#             # #32x64x64
+#             nn.Conv2d(32, 64, 3, stride=2, padding=1, bias=True),
+#             nn.BatchNorm2d(64),
+#             nn.LeakyReLU(self.slope, inplace=True),
+#             # #64x32x32
+#             nn.Conv2d(64, 128, 3, stride=2, padding=1, bias=True),
+#             nn.BatchNorm2d(128),
+#             nn.LeakyReLU(self.slope, inplace=True),
+#             # #128x16x16
+#             nn.Conv2d(128, 256, 3, stride=2, padding=1, bias=True),
+#             nn.BatchNorm2d(256),
+#             nn.LeakyReLU(self.slope, inplace=True),
+#             # #256x8x8
+#             nn.Conv2d(256, 512, 3, stride=2, padding=1, bias=True),
+#             nn.BatchNorm2d(512),
+#             nn.LeakyReLU(self.slope, inplace=True),
+#             #512x4x4
+#             nn.Conv2d(512, 512, 3, stride=2, padding=0, bias=True),
+#             nn.BatchNorm2d(512),
+#             nn.LeakyReLU(self.slope, inplace=True),
+#         )
+#
+#
+#         # Inference over z
+#         self.inference_joint = nn.Sequential(
+#             nn.Linear(512 + self.z_dim, self.h_dim),
+#             nn.LeakyReLU(0.2),
+#             nn.Linear(self.h_dim, self.h_dim),
+#             nn.LeakyReLU(0.2),
+#             nn.Linear(self.h_dim, 1),
+#             nn.Sigmoid()
+#         )
+#
+#         initialize_weights(self)
+#
+#     def forward(self, x, z):
+#         x = self.inference_x(x)
+#         x = x.view(x.shape[0], -1)
+#         z = z.view(z.shape[0], -1)
+#         xz = torch.cat((x,z), dim=1)
+#         out = self.inference_joint(xz)
+#
+#         return out
+#
+# class Encoder(nn.Module):
+#     """
+#     Input:
+#     Output:
+#     """
+#     def __init__(self, z_dim, params):
+#         super().__init__()
+#
+#         self.z_dim = z_dim
+#         self.slope = params['slope']
+#         self.dropout = params['dropout']
+#         self.batch_size = params['batch_size']
+#
+#
+#         self.encoder = nn.Sequential(
+#             #3x128x128
+#             nn.Conv2d(3, 32, 3, stride=2, padding=1, bias=True),
+#             nn.BatchNorm2d(32),
+#             nn.LeakyReLU(self.slope, inplace=True),
+#             # #32x64x64
+#             nn.Conv2d(32, 64, 3, stride=2, padding=1, bias=True),
+#             nn.BatchNorm2d(64),
+#             nn.LeakyReLU(self.slope, inplace=True),
+#             # #64x32x32
+#             nn.Conv2d(64, 128, 3, stride=2, padding=1, bias=True),
+#             nn.BatchNorm2d(128),
+#             nn.LeakyReLU(self.slope, inplace=True),
+#             # #128x16x16
+#             nn.Conv2d(128, 256, 3, stride=2, padding=1, bias=True),
+#             nn.BatchNorm2d(256),
+#             nn.LeakyReLU(self.slope, inplace=True),
+#             # #256x8x8
+#             nn.Conv2d(256, 512, 3, stride=2, padding=1, bias=True),
+#             nn.BatchNorm2d(512),
+#             nn.LeakyReLU(self.slope, inplace=True),
+#             #512x4x4
+#             nn.Conv2d(512, 512, 3, stride=2, padding=0, bias=True),
+#             nn.BatchNorm2d(512),
+#             nn.LeakyReLU(self.slope, inplace=True),
+#             #512x1x1
+#             nn.Conv2d(512, self.z_dim, 1, stride=1, padding=0, bias=True),
+#             #z_dimx1x1
+#         )
+#         initialize_weights(self)
+#
+#     def forward(self, x):
+#         x = self.encoder(x)
+#
+#         return x
+
+
+
 class Generator(nn.Module):
     """
     Input: Vector from representation space of dimension z-dim
@@ -293,16 +466,16 @@ class Generator(nn.Module):
             nn.BatchNorm2d(64),
             nn.LeakyReLU(self.slope,inplace=True),
             #64x64x64
-            nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, output_padding=1,bias=True),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(self.slope,inplace=True),
+            # nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, output_padding=1,bias=True),
+            # nn.BatchNorm2d(32),
+            # nn.LeakyReLU(self.slope,inplace=True),
             #32x128x128
-            nn.Conv2d(32, 3, 1, stride=1, bias=True),
+            nn.Conv2d(64, 3, 1, stride=1, bias=True),
             nn.Tanh()
             #3x128x128
         )
 
-        # utils.initialize_weights(self)
+        initialize_weights(self)
 
     def forward(self, x):
         x = self.generator(x)
@@ -326,11 +499,11 @@ class Discriminator(nn.Module):
         # inference over x
         self.inference_x = nn.Sequential(
             #3x128x128
-            nn.Conv2d(3, 32, 3, stride=2, padding=1, bias=True),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(self.slope, inplace=True),
+            # nn.Conv2d(3, 32, 3, stride=2, padding=1, bias=True),
+            # nn.BatchNorm2d(32),
+            # nn.LeakyReLU(self.slope, inplace=True),
             # #32x64x64
-            nn.Conv2d(32, 64, 3, stride=2, padding=1, bias=True),
+            nn.Conv2d(3, 64, 3, stride=2, padding=1, bias=True),
             nn.BatchNorm2d(64),
             nn.LeakyReLU(self.slope, inplace=True),
             # #64x32x32
@@ -362,7 +535,7 @@ class Discriminator(nn.Module):
             nn.Sigmoid()
         )
 
-        # utils.initialize_weights(self)
+        initialize_weights(self)
 
     def forward(self, x, z):
         x = self.inference_x(x)
@@ -389,11 +562,11 @@ class Encoder(nn.Module):
 
         self.encoder = nn.Sequential(
             #3x128x128
-            nn.Conv2d(3, 32, 3, stride=2, padding=1, bias=True),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(self.slope, inplace=True),
-            # #32x64x64
-            nn.Conv2d(32, 64, 3, stride=2, padding=1, bias=True),
+            # nn.Conv2d(3, 32, 3, stride=2, padding=1, bias=True),
+            # nn.BatchNorm2d(32),
+            # nn.LeakyReLU(self.slope, inplace=True),
+            #32x64x64
+            nn.Conv2d(3, 64, 3, stride=2, padding=1, bias=True),
             nn.BatchNorm2d(64),
             nn.LeakyReLU(self.slope, inplace=True),
             # #64x32x32
@@ -416,7 +589,7 @@ class Encoder(nn.Module):
             nn.Conv2d(512, self.z_dim, 1, stride=1, padding=0, bias=True),
             #z_dimx1x1
         )
-        # utils.initialize_weights(self)
+        initialize_weights(self)
 
     def forward(self, x):
         x = self.encoder(x)
@@ -424,23 +597,146 @@ class Encoder(nn.Module):
         return x
 
 
+class VAEncoder(nn.Module):
+    def __init__(self, h_dim=1024, z_dim=128):
+        super().__init__()
+        self.slope = 0.1
+        self.encoder = nn.Sequential(
+            #3x128x128
+            nn.Conv2d(3, 32, 3, stride=2, padding=1),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(self.slope),
+            #32x64x64
+            nn.Conv2d(32, 64, 3, stride=2, padding=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(self.slope),
+            #64x32x32
+            nn.Conv2d(64, 128, 3, stride=2, padding=1),
+            nn.BatchNorm2d(128),
+            nn.LeakyReLU(self.slope),
+            #128x16x16
+            nn.Conv2d(128, 256, 3, stride=2, padding=1),
+            nn.BatchNorm2d(256),
+            nn.LeakyReLU(self.slope),
+            #256x8x8
+            nn.Conv2d(256, 512, 3, stride=2, padding=1),
+            nn.BatchNorm2d(512),
+            nn.LeakyReLU(self.slope),
+            #512x4x4
+            # nn.Conv2d(512, 512, 3, stride=2, padding=0),
+            # nn.BatchNorm2d(512),
+            # nn.LeakyReLU(),
+            # #512x1x1
+        )
+
+        self.fc1 = nn.Linear(8192, 128)
+        self.fc2 = nn.Linear(8192, 128)
+        self.fc3 = nn.Linear(128,8192)
+
+
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(512, 256, 3, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm2d(256),
+            nn.LeakyReLU(self.slope),
+            #
+            nn.ConvTranspose2d(256, 128, 3, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm2d(128),
+            nn.LeakyReLU(self.slope),
+            #
+            nn.ConvTranspose2d(128, 64, 3, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(self.slope),
+            #
+            nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(self.slope),
+            #
+            nn.ConvTranspose2d(32, 3, 3, stride=2, padding=1, output_padding=1),
+            # nn.BatchNorm2d(32),
+            # nn.LeakyReLU(),
+            #
+            # nn.Conv2d(16, 3, 3,2 )
+            # nn.Tanh()
+            nn.Sigmoid()
+        )
+        initialize_weights
+
+    def reparameterize(self, mu, logvar):
+        std = logvar.mul(0.5).exp_()
+        # return torch.normal(mu, std)
+        esp = torch.randn(*mu.size()).to(mu.device.type)
+        z = mu + std * esp
+        return z
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = x.view(x.shape[0],-1)
+
+        mu, logvar = self.fc1(x), self.fc2(x)
+        z = self.reparameterize(mu,logvar)
+
+        z = F.leaky_relu(self.fc3(z), self.slope)
+        z = z.view(z.shape[0],512,4,4)
+        z = self.decoder(z)
+
+        return z, mu, logvar
+
+
+# x = torch.randn(4,3,128,128)
+# # x = torch.randn(4,512,4,4)
+# V = VAE()
+# x = V(x)
+# print(x.shape)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # z_dim = 128
 # params = {'slope':0.1, 'dropout':0.2, 'batch_size':4}
 # h_dim = 1024
-#
+# #
 # G = Generator(z_dim, params)
 # D = Discriminator(z_dim, h_dim, params)
 # E = Encoder(z_dim, params)
-#
-# X = torch.randn(4,3,128,128)
+# #
+# X = torch.randn(4,3,64,64)
 # z = torch.randn(4,z_dim,1,1)
-#
+# #
 # z_hat = E(X)
 # X_hat = G(z)
-#
+# # print(X_hat.shape)
+# #
 # D_enc = D(X, z_hat)
-# D_gen = D(X_hat,z)
-#
-# print(D_gen.shape)
+# # D_gen = D(X_hat,z)
+# #
+# # print(D_gen.shape)
 # print(D_enc.shape)

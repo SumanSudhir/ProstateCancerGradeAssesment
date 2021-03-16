@@ -66,7 +66,7 @@ df = df.loc[files]
 df = df.reset_index()
 
 # df = df[df['isup_grade'] != 0]
-df = df[df['data_provider'] == 'karolinska']
+df = df[df['data_provider'] != 'karolinska']
 
 # splits = StratifiedKFold(n_splits=nfolds, random_state=SEED, shuffle=True)
 # splits = list(splits.split(df, df.isup_grade))
@@ -168,7 +168,7 @@ valid_acc = accuracy_score(valid_label, valid_pred)
 score = cohen_kappa_score(valid_label, valid_pred, weights='quadratic')
 
 sub_df = pd.DataFrame({'image_id': img_ids, 'tile_id': tile_ids, 'weight': att_w, 'X': Xc, 'Y': Yc})
-sub_df.to_csv('../../data/karolinska_weight_karolinska_0.csv', index=False)
+sub_df.to_csv('../../data/radbound_weight_tkarolinska_0.csv', index=False)
 
 print("Validation Accuracy:", valid_acc)
 print("Kappa Score", score)

@@ -28,6 +28,7 @@ size = 256
 split = 0
 nfolds = 4
 DEBUG = False
+N=64
 
 files_path = '../../CLAM/pandaPatches10x/patches'
 train_csv = '../../data/train.csv'
@@ -56,11 +57,11 @@ else:
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-df = pd.read_csv(train_csv)
+df = pd.read_csv(train_csv).set_index('image_id')
 #
-# files = sorted(set([p[:-3] for p in os.listdir(files_path) if p.endswith('.h5')]))
-# df = df.loc[files]
-# df = df.reset_index()
+files = sorted(set([p[:-3] for p in os.listdir(files_path) if p.endswith('.h5')]))
+df = df.loc[files]
+df = df.reset_index()
 
 # df = df[df['isup_grade'] != 0]
 df = df[df['data_provider'] != 'karolinska']
@@ -69,7 +70,7 @@ df = df[df['data_provider'] != 'karolinska']
 # splits = list(splits.split(df, df.isup_grade))
 # folds_splits = np.zeros(len(df)).astype(np.int)
 #
-# weighted_df = pd.read_csv(weight)
+weighted_df = pd.read_csv(weight)
 #
 # for i in range(nfolds): folds_splits[splits[i][1]] = i
 # df["split"] = folds_splits
@@ -92,14 +93,15 @@ valid_transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize(mean, std)])
 
-v_dataset = Whole_Slide_ROI(df, weighted_df, files_path, valid_transform)
+# v_dataset = Whole_Slide_ROI(df, weighted_df, files_path, valid_transform)
+v_dataset = Whole_Slide_ROI(df, weighted_df, files_path, valid_transform, N)
 validloader = DataLoader(v_dataset, batch_size=6, shuffle=False, num_workers=4)
 
 
 """Training"""
-model = EfficientAvgModel()
+model = EfficientAvgModel(out_dim=5)
 model.to(device)
-model.load_state_dict(torch.load('../OUTPUT/stage2/split_0/efficient_b0_24_0.8203206327782633.pth', map_location=torch.device(device)))
+model.load_state_dict(torch.load('../OUTPUT/karolinska/stage2n/split_0/efficient_b0_64_18_0.8711.pth', map_location=torch.device(device)))
 model.eval()
 
 criterion = nn.BCEWithLogitsLoss()

@@ -18,12 +18,7 @@ from net.modules import *
 from dataset.dataset import *
 from utils.utils import *
 
-
-
-class BiGAN(object):
-    """
-    BiGAN network haveing multiple function to train and validate
-    """
+class VAE(object):
     def __init__(self, args):
         self.gpu = args.gpu
         self.epochs = args.epoch
@@ -37,7 +32,7 @@ class BiGAN(object):
         self.beta1 = args.beta1
         self.beta2 = args.beta2
         self.decay = args.decay
-        self.X_dim = 64*64*3
+        self.X_dim = 128*128*3
 
         self.split = args.split
         self.csv_path = args.csv_path
@@ -45,26 +40,17 @@ class BiGAN(object):
         self.result_dir = args.result_dir
         self.save_dir = args.save_dir
 
-        params = {'slope':self.slope, 'dropout':self.dropout, 'batch_size':self.batch_size}
+        self.Net = VAEncoder()
+        self.unorm = UnNormalize()
 
-        self.G = Generator(self.z_dim, params)
-        self.D = Discriminator(self.z_dim, self.h_dim, params)
-        self.E = Encoder(self.z_dim, params)
-
-        # self.G_optimizer = torch.optim.Adam(list(self.G.parameters()) + list(self.E.parameters()), lr=self.learning_rate, betas=[self.beta1,self.beta2], weight_decay=self.decay)
-        self.G_optimizer = torch.optim.Adam(chain(self.E.parameters(), self.G.parameters()), lr=self.learning_rate, betas=[self.beta1,self.beta2], weight_decay=self.decay)
-        self.D_optimizer = torch.optim.Adam(self.D.parameters(), lr=self.learning_rate, betas=[self.beta1,self.beta2], weight_decay=self.decay)
+        self.optimizer = torch.optim.Adam(self.Net.parameters(), lr=self.learning_rate, betas=[self.beta1,self.beta2], weight_decay=self.decay)
 
         if self.gpu:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-            self.G.to(self.device)
-            self.D.to(self.device)
-            self.E.to(self.device)
+            self.Net.to(self.device)
 
         print('---------- Networks architecture -------------')
-        print_network(self.G)
-        print_network(self.E)
-        print_network(self.D)
+        print_network(self.Net)
         print('-----------------------------------------------')
 
         df = pd.read_csv(self.csv_path)
@@ -75,67 +61,45 @@ class BiGAN(object):
         v_dataset = Whole_Slide_Tiles(df_valid, self.files_path, custom_transforms=get_transform(data='valid'))
 
         self.trainloader = DataLoader(t_dataset, self.batch_size, shuffle=True, num_workers=4)
-        self.validloader = DataLoader(v_dataset, self.batch_size, shuffle=False, num_workers=4)
+        self.validloader = DataLoader(v_dataset, self.batch_size, shuffle=True, num_workers=4)
 
     def reset_grad(self):
-        self.G.zero_grad()
-        self.D.zero_grad()
-        self.E.zero_grad()
+        self.Net.zero_grad()
 
     def train(self):
         self.train_hist = {}
-        self.train_hist['D_loss'] = []
-        self.train_hist['G_loss'] = []
+        self.train_hist['loss'] = []
 
         self.eval_hist = {}
-        self.eval_hist['D_loss'] = []
-        self.eval_hist['G_loss'] = []
+        self.eval_hist['loss'] = []
         self.eval_hist['pixel_norm'] = []
         self.eval_hist['z_norm'] = []
 
         for epoch in range(self.epochs):
-            self.G.train()
-            self.D.train()
-            self.E.train()
+            self.Net.train()
 
-            train_loss_G = 0.0
-            train_loss_D = 0.0
+            train_loss = 0.0
 
             for batchID, (data, image_id) in enumerate(tqdm(self.trainloader)):
-                z = torch.randn(data.shape[0], self.z_dim, 1, 1)
+                z = torch.randn(data.shape[0], self.z_dim, 1, 1, requires_grad=True)
                 X = data
 
                 if self.gpu:
                     X, z = X.to(self.device), z.to(self.device)
 
+                self.optimizer.zero_grad()
+                X_hat, mu, logvar = self.Net(X)
+
+                loss = VAE_loss(X_hat, X, mu, logvar)
+
+                loss.backward()
+                self.optimizer.step()
                 # self.reset_grad()
 
-                self.G_optimizer.zero_grad()
-                self.D_optimizer.zero_grad()
+                train_loss += loss.item()
 
-                z_hat = self.E(X)
-                X_hat = self.G(z)
-
-                D_enc = self.D(X, z_hat)
-                D_gen = self.D(X_hat,z)
-
-                D_loss = -torch.mean(log(D_enc) + log(1-D_gen))
-                G_loss = -torch.mean(log(D_gen) + log(1-D_enc))
-
-                D_loss.backward(retain_graph=True)
-                self.D_optimizer.step()
-
-                G_loss.backward()
-                self.G_optimizer.step()
-                # self.reset_grad()
-
-                train_loss_D += D_loss.item()
-                train_loss_G += G_loss.item()
-                # print(train_loss_D, train_loss_G)
-
-
-                if((1+batchID)%100 == 0):
-                    samples = X_hat.detach().cpu().numpy()
+                if((1+batchID)%30 == 0):
+                    samples = self.unorm(X_hat.detach()).cpu().numpy()
 
                     fig = plt.figure(figsize=(8,4))
                     gs = gridspec.GridSpec(4,8)
@@ -152,7 +116,7 @@ class BiGAN(object):
                             sample = np.clip(sample, 0, 1)
                             # sample = sample.reshape(128,128,3)
                             sample = sample.transpose([1,2,0])
-                            sample = np.rot90(sample, 2)
+                            # sample = np.rot90(sample, 2)
                             plt.imshow(sample)
 
                     if not os.path.exists(self.result_dir + '/train/'):
@@ -162,23 +126,18 @@ class BiGAN(object):
                     plt.savefig(self.result_dir + '/train/{}.png'.format(filename, bbox_inches='tight'))
                     plt.close()
 
-            print("Train loss G:", train_loss_G / len(self.trainloader))
-            print("Train loss D:", train_loss_D / len(self.trainloader))
+            print("Train loss:", train_loss / len(self.trainloader))
 
-            self.train_hist['D_loss'].append(train_loss_D / len(self.trainloader))
-            self.train_hist['G_loss'].append(train_loss_G / len(self.trainloader))
+            self.train_hist['loss'].append(train_loss / len(self.trainloader))
 
-            # Validation
-            self.G.eval()
-            self.D.eval()
-            self.E.eval()
-
-            valid_loss_G = 0
-            valid_loss_D = 0
-
+    #         # Validation
+            self.Net.eval()
+    #
+            valid_loss = 0
+    #
             mean_pixel_norm = 0.0
             mean_z_norm = 0
-            norm_counter = 1
+            norm_counter = len(self.validloader)
 
             for batchID, (data, image_id) in enumerate(tqdm(self.validloader)):
                 z = torch.randn(data.shape[0], self.z_dim, 1, 1)
@@ -186,34 +145,20 @@ class BiGAN(object):
                 if self.gpu:
                     X, z = data.to(self.device), z.to(self.device)
 
-                z_hat = self.E(X)
-                X_hat = self.G(z)
+                X_hat, mu, logvar = self.Net(X)
 
-                D_enc = self.D(X,z_hat)
-                D_gen = self.D(X_hat,z)
+                loss = VAE_loss(X_hat, X, mu, logvar)
+    #
+                valid_loss += loss.item()
 
-                D_loss = -torch.mean(log(D_enc) + log(1-D_gen))
-                G_loss = -torch.mean(log(D_gen) + log(1-D_enc))
-
-                valid_loss_G += G_loss.item()
-                valid_loss_D += D_loss.item()
-
-                pixel_norm = X -  self.G(z_hat)
+                pixel_norm = X-X_hat
                 pixel_norm = pixel_norm.norm().item() / float(self.X_dim)
                 mean_pixel_norm += pixel_norm
 
+                # norm_counter += 1
+            print("Eval loss:", valid_loss/ norm_counter)
 
-                z_norm = z - self.E(X_hat)
-                z_norm = z_norm.norm().item() / float(self.z_dim)
-                mean_z_norm += z_norm
-
-                norm_counter += 1
-
-            print("Eval loss G:", valid_loss_G / norm_counter)
-            print("Eval loss D:", valid_loss_D / norm_counter)
-
-            self.eval_hist['D_loss'].append(valid_loss_D / norm_counter)
-            self.eval_hist['G_loss'].append(valid_loss_G / norm_counter)
+            self.eval_hist['loss'].append(valid_loss / norm_counter)
 
             print("Pixel norm:", mean_pixel_norm / norm_counter)
             self.eval_hist['pixel_norm'].append( mean_pixel_norm / norm_counter )
@@ -221,14 +166,8 @@ class BiGAN(object):
             with open('pixel_error_BIGAN.txt', 'a') as f:
                 f.writelines(str(mean_pixel_norm / norm_counter) + '\n')
 
-            print("z norm:", mean_z_norm / norm_counter)
-            self.eval_hist['z_norm'].append( mean_z_norm / norm_counter )
-
-            with open('z_error_BIGAN.txt', 'a') as f:
-                f.writelines(str(mean_z_norm / norm_counter) + '\n')
-
             ### Save X and its reconstruction at the end of each epoch
-            samples = X.detach().cpu().numpy()
+            samples = self.unorm(X.detach()).cpu().numpy()
 
             fig = plt.figure(figsize=(10,2))
             gs = gridspec.GridSpec(2,10)
@@ -243,14 +182,14 @@ class BiGAN(object):
                     ax.set_aspect('equal')
 
                     sample = np.clip(sample, 0, 1)
-                    # sample = sample.reshape(128,128,3)
                     sample = sample.transpose([1,2,0])
-                    sample = np.rot90(sample, 2)
+    #                 sample = sample.reshape(128,128,3)
+                    # sample = np.rot90(sample, 2)
                     plt.imshow(sample)
 
 
-            X_hat = self.G(self.E(X))
-            samples = X_hat.detach().cpu().numpy()
+            X_hat = self.Net(X)[0]
+            samples = self.unorm(X_hat.detach()).cpu().numpy()
             for i, sample in enumerate(samples):
                 if i<10:
                     ax = plt.subplot(gs[10+i])
@@ -258,22 +197,32 @@ class BiGAN(object):
                     ax.set_xticklabels([])
                     ax.set_yticklabels([])
                     ax.set_aspect('equal')
-
+    #
                     sample = np.clip(sample, 0, 1)
-                    # sample = sample.reshape(128,128,3)
                     sample = sample.transpose([1,2,0])
-                    sample = np.rot90(sample, 2)
+                    # sample = sample.reshape(128,128,3)
+                    # sample = np.rot90(sample, 2)
                     plt.imshow(sample)
 
             if not os.path.exists(self.result_dir + '/recons/'):
                 os.makedirs(self.result_dir + '/recons/')
 
-            filename = "epoch_" + str(1+epoch)
+            filename = "epoch_" + str(epoch)
             plt.savefig(self.result_dir + '/recons/{}.png'.format(filename), bbox_inches='tight')
             plt.close()
             self.save_model()
 
     def save_model(self):
-        torch.save(self.G.state_dict(), self.save_dir + "/G.pt")
-        torch.save(self.E.state_dict(), self.save_dir + "/E.pt")
-        torch.save(self.D.state_dict(), self.save_dir + "/D.pt")
+        torch.save(self.Net.state_dict(), self.save_dir + "/VAE.pt")
+
+    # def plot_tsne(self):
+    #     df = pd.read_csv('../../data/train.csv')
+    #     files = sorted(set([p[:-3] for p in os.listdir(self.files_path) if p.endswith('.h5')]))
+    #     df = df.loc[files]
+    #     df = df.reset_index()
+    #
+    #     df_rad = df[df['data_provider'] == 'radboud']
+    #     df_kar = df[df['data_provider'] == 'karolinska']
+    #
+    #     t_dataset = Whole_Slide_Tiles(df_rad, self.files_path, custom_transforms=get_transform(data='train'))
+    #     v_dataset = Whole_Slide_Tiles(df_valid, self.files_path, custom_transforms=get_transform(data='valid'))
